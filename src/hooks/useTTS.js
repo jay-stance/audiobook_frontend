@@ -6,9 +6,7 @@ import useStore from '../store/useStore';
  */
 function splitIntoSentences(text) {
   if (!text) return [];
-  // Split on sentence-ending punctuation followed by whitespace
   const raw = text.match(/[^.!?]*[.!?]+[\s]*/g) || [text];
-  // Filter out empty and merge very short fragments
   const sentences = [];
   let buffer = '';
   for (const s of raw) {
@@ -29,6 +27,7 @@ export function useTTS() {
   const currentIndexRef = useRef(0);
   const isActiveRef = useRef(false);
   const listenerTimerRef = useRef(null);
+  const onPageCompleteRef = useRef(null);
 
   const {
     isPlaying, setIsPlaying,
@@ -38,7 +37,7 @@ export function useTTS() {
     selectedVoice,
     volume,
     incrementListeningTime,
-    sleepTimerEnd, sleepTimerActive, clearSleepTimer, setIsPlaying: setPlaying
+    sleepTimerEnd, sleepTimerActive, clearSleepTimer
   } = useStore();
 
   // Track listening time
@@ -70,7 +69,6 @@ export function useTTS() {
       const found = voices.find(v => v.name === selectedVoice);
       if (found) return found;
     }
-    // Default to a good English voice
     return voices.find(v => v.lang.startsWith('en') && v.localService) ||
            voices.find(v => v.lang.startsWith('en')) ||
            voices[0];
@@ -80,6 +78,10 @@ export function useTTS() {
     if (index >= sentencesRef.current.length) {
       setIsPlaying(false);
       isActiveRef.current = false;
+      // Fire page-complete callback so Reader can auto-advance
+      if (onPageCompleteRef.current) {
+        onPageCompleteRef.current();
+      }
       return;
     }
 
@@ -111,8 +113,6 @@ export function useTTS() {
     setCurrentSentenceIndex(index);
     synth.speak(utterance);
 
-    // Chrome bug workaround: Chrome pauses synthesis after ~15 seconds
-    // We need to resume it periodically
     clearInterval(listenerTimerRef.current);
     listenerTimerRef.current = setInterval(() => {
       if (synth.speaking && !synth.paused) {
@@ -150,7 +150,6 @@ export function useTTS() {
       synthRef.current.resume();
       isActiveRef.current = true;
       setIsPlaying(true);
-      // Restart chrome workaround
       clearInterval(listenerTimerRef.current);
       listenerTimerRef.current = setInterval(() => {
         if (synthRef.current.speaking && !synthRef.current.paused) {
@@ -182,6 +181,7 @@ export function useTTS() {
     }
   }, [isPlaying, pause, resume, play]);
 
+  // Skip ±3 sentences (existing behavior)
   const skipForward = useCallback(() => {
     const nextIndex = Math.min(currentIndexRef.current + 3, sentencesRef.current.length - 1);
     if (isActiveRef.current || isPlaying) {
@@ -204,6 +204,29 @@ export function useTTS() {
     }
   }, [isPlaying, stop, play, setCurrentSentenceIndex]);
 
+  // Skip ±1 sentence (new fine-grained control)
+  const skipOneSentenceForward = useCallback(() => {
+    const nextIndex = Math.min(currentIndexRef.current + 1, sentencesRef.current.length - 1);
+    if (isActiveRef.current || isPlaying) {
+      stop();
+      play(null, nextIndex);
+    } else {
+      currentIndexRef.current = nextIndex;
+      setCurrentSentenceIndex(nextIndex);
+    }
+  }, [isPlaying, stop, play, setCurrentSentenceIndex]);
+
+  const skipOneSentenceBackward = useCallback(() => {
+    const prevIndex = Math.max(currentIndexRef.current - 1, 0);
+    if (isActiveRef.current || isPlaying) {
+      stop();
+      play(null, prevIndex);
+    } else {
+      currentIndexRef.current = prevIndex;
+      setCurrentSentenceIndex(prevIndex);
+    }
+  }, [isPlaying, stop, play, setCurrentSentenceIndex]);
+
   const jumpToSentence = useCallback((index) => {
     if (isActiveRef.current || isPlaying) {
       stop();
@@ -213,6 +236,10 @@ export function useTTS() {
       setCurrentSentenceIndex(index);
     }
   }, [isPlaying, stop, play, setCurrentSentenceIndex]);
+
+  const setOnPageComplete = useCallback((callback) => {
+    onPageCompleteRef.current = callback;
+  }, []);
 
   const getAvailableVoices = useCallback(() => {
     return synthRef.current.getVoices();
@@ -234,9 +261,12 @@ export function useTTS() {
     togglePlayPause,
     skipForward,
     skipBackward,
+    skipOneSentenceForward,
+    skipOneSentenceBackward,
     jumpToSentence,
     loadText,
     getAvailableVoices,
+    setOnPageComplete,
     sentences: sentencesRef.current,
     currentIndex: currentIndexRef.current
   };

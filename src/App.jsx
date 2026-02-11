@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Reader from './pages/Reader';
 import Stats from './pages/Stats';
 import MiniPlayer from './components/MiniPlayer';
+import InstallPrompt from './components/InstallPrompt';
 import useTTS from './hooks/useTTS';
 import useStore from './store/useStore';
 
@@ -27,6 +28,8 @@ export default function App() {
     <Layout>
       {renderView()}
       {activeView !== 'reader' && <MiniPlayer tts={tts} />}
+      <InstallPrompt />
     </Layout>
   );
 }
+

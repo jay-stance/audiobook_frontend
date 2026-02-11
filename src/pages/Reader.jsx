@@ -13,7 +13,7 @@ import api from '../lib/api';
 
 export default function Reader() {
   const {
-    currentBook, currentPage, setActiveView, setShowMiniPlayer,
+    currentBook, currentPage, setCurrentPage, setActiveView, setShowMiniPlayer,
     showTextViewer, setShowTextViewer,
     showBookmarks, setShowBookmarks,
     currentSentenceIndex, totalSentences,
@@ -56,6 +56,36 @@ export default function Reader() {
     }
   }, [currentText]);
 
+  // Auto-skip blank pages
+  useEffect(() => {
+    if (!currentBook || !currentBook.pages) return;
+    const isBlank = !currentText || currentText.trim().length === 0;
+    if (isBlank && currentPage < currentBook.totalPages - 1) {
+      const timer = setTimeout(() => {
+        setCurrentPage(currentPage + 1);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [currentText, currentPage, currentBook, setCurrentPage]);
+
+  // Auto-advance to next page when TTS finishes
+  useEffect(() => {
+    tts.setOnPageComplete(() => {
+      if (!currentBook || !currentBook.pages) return;
+      if (currentPage < currentBook.totalPages - 1) {
+        const nextPage = currentPage + 1;
+        setCurrentPage(nextPage);
+        // Auto-play the next page after a brief pause
+        setTimeout(() => {
+          const nextText = currentBook.pages[nextPage]?.text || '';
+          if (nextText.trim()) {
+            tts.play(nextText, 0);
+          }
+        }, 500);
+      }
+    });
+  }, [currentBook, currentPage, setCurrentPage, tts]);
+
   // Auto-save progress
   useEffect(() => {
     if (!currentBook?._id) return;
@@ -87,11 +117,19 @@ export default function Reader() {
           break;
         case 'ArrowRight':
           e.preventDefault();
-          tts.skipForward();
+          if (e.shiftKey) {
+            tts.skipOneSentenceForward();
+          } else {
+            tts.skipForward();
+          }
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          tts.skipBackward();
+          if (e.shiftKey) {
+            tts.skipOneSentenceBackward();
+          } else {
+            tts.skipBackward();
+          }
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -120,7 +158,6 @@ export default function Reader() {
   const handleDownload = async () => {
     try {
       const text = currentBook.cleanedText || currentText;
-      // For MVP, download as text file. Backend TTS stub shown in info.
       const blob = new Blob([text], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -192,24 +229,25 @@ export default function Reader() {
       <AudioPlayer
         tts={tts}
         currentText={currentText}
-        onToggleText={() => setShowTextViewer(!showTextViewer)}
-        onToggleBookmarks={() => setShowBookmarks(!showBookmarks)}
         onToggleSleepTimer={() => setShowSleepTimerLocal(!showSleepTimer)}
         onToggleVoice={() => setShowVoice(!showVoice)}
       />
 
       {/* Panels */}
       {showSleepTimer && <SleepTimer onClose={() => setShowSleepTimerLocal(false)} />}
-      {showBookmarks && <BookmarkPanel tts={tts} onClose={() => setShowBookmarks(false)} />}
       {showVoice && <VoiceSelector onClose={() => setShowVoice(false)} />}
 
       {/* Text Viewer */}
       <TextViewer text={currentText} />
 
+      {/* Bookmarks — below text */}
+      {showBookmarks && <BookmarkPanel tts={tts} onClose={() => setShowBookmarks(false)} />}
+
       {/* Keyboard shortcuts hint */}
       <div className="text-center text-xs text-gray-500 hidden sm:block">
         <span className="px-2 py-0.5 rounded bg-white/5 mr-2">Space</span> Play/Pause
-        <span className="px-2 py-0.5 rounded bg-white/5 mx-2">←→</span> Skip
+        <span className="px-2 py-0.5 rounded bg-white/5 mx-2">←→</span> Skip 3
+        <span className="px-2 py-0.5 rounded bg-white/5 mx-2">Shift+←→</span> Skip 1
         <span className="px-2 py-0.5 rounded bg-white/5 mx-2">↑↓</span> Speed
       </div>
     </div>
