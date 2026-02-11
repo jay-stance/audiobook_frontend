@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ArrowLeft, BookOpen, Download, FileText } from 'lucide-react';
 import AudioPlayer from '../components/AudioPlayer';
 import TextViewer from '../components/TextViewer';
@@ -25,6 +25,8 @@ export default function Reader() {
   const [showSleepTimer, setShowSleepTimerLocal] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
   const [showChapters, setShowChapters] = useState(false);
+  const [selectionRange, setSelectionRange] = useState(null);
+  const autoPlayNextRef = useRef(false);
 
   // Current page text
   const currentText = useMemo(() => {
@@ -36,7 +38,7 @@ export default function Reader() {
     return currentBook.cleanedText || '';
   }, [currentBook, currentPage]);
 
-  // Re-fetch full book data if we only have persisted metadata (no pages/cleanedText)
+  // Re-fetch full book data if we only have persisted metadata
   useEffect(() => {
     if (currentBook?._id && !currentBook.pages && !currentBook.cleanedText) {
       api.get(`/api/library/${currentBook._id}`)
@@ -49,10 +51,86 @@ export default function Reader() {
     }
   }, [currentBook?._id]);
 
-  // Load text into TTS when page or book changes
+  // Toggle bookmark for current sentence or selected range
+  const handleBookmark = () => {
+    if (!currentText) return;
+    
+    // If we have a multi-sentence selection, bookmark that range
+    if (selectionRange) {
+      const sentences = currentText.match(/[^.!?]*[.!?]+[\s]*/g) || [currentText];
+      // Filter logic matches TextViewer
+      const splitSentences = [];
+      let buffer = '';
+      for (const s of sentences) {
+        buffer += s;
+        if (buffer.trim().length > 20) {
+          splitSentences.push(buffer.trim());
+          buffer = '';
+        }
+      }
+      if (buffer.trim()) splitSentences.push(buffer.trim());
+
+      // Ensure range is valid
+      const start = Math.min(selectionRange.start, selectionRange.end);
+      const end = Math.max(selectionRange.start, selectionRange.end);
+
+      const selectedText = splitSentences
+        .slice(start, end + 1)
+        .join(' ');
+
+      const bookmark = {
+        bookId: currentBook._id,
+        text: selectedText,
+        pageIndex: currentPage,
+        sentenceIndex: start, 
+        timestamp: Date.now()
+      };
+      
+      useStore.getState().addBookmark(bookmark);
+      setSelectionRange(null); // Clear selection after bookmarking
+      return;
+    }
+
+    // Default: Bookmark current playing sentence
+    const sentences = currentText.match(/[^.!?]*[.!?]+[\s]*/g) || [currentText];
+    const splitSentences = [];
+    let buffer = '';
+    for (const s of sentences) {
+      buffer += s;
+      if (buffer.trim().length > 20) {
+        splitSentences.push(buffer.trim());
+        buffer = '';
+      }
+    }
+    if (buffer.trim()) splitSentences.push(buffer.trim());
+
+    const text = splitSentences[currentSentenceIndex] || currentText;
+    
+    const bookmark = {
+      bookId: currentBook._id,
+      text,
+      pageIndex: currentPage,
+      sentenceIndex: currentSentenceIndex,
+      timestamp: Date.now()
+    };
+    useStore.getState().addBookmark(bookmark);
+  };
+
+  // Load text into TTS when page or book changes — always reset to sentence 0
   useEffect(() => {
     if (currentText) {
       tts.loadText(currentText);
+      useStore.getState().setCurrentSentenceIndex(0);
+      setSelectionRange(null); // Clear selection on new page
+
+      // If we're auto-advancing from a finished page, start playing
+      if (autoPlayNextRef.current) {
+        autoPlayNextRef.current = false;
+        // Small delay to let loadText settle before playing
+        setTimeout(() => {
+          tts.play(currentText, 0);
+        }, 200);
+      }
     }
   }, [currentText]);
 
@@ -73,15 +151,8 @@ export default function Reader() {
     tts.setOnPageComplete(() => {
       if (!currentBook || !currentBook.pages) return;
       if (currentPage < currentBook.totalPages - 1) {
-        const nextPage = currentPage + 1;
-        setCurrentPage(nextPage);
-        // Auto-play the next page after a brief pause
-        setTimeout(() => {
-          const nextText = currentBook.pages[nextPage]?.text || '';
-          if (nextText.trim()) {
-            tts.play(nextText, 0);
-          }
-        }, 500);
+        autoPlayNextRef.current = true;
+        setCurrentPage(currentPage + 1);
       }
     });
   }, [currentBook, currentPage, setCurrentPage, tts]);
@@ -229,6 +300,7 @@ export default function Reader() {
       <AudioPlayer
         tts={tts}
         currentText={currentText}
+        onBookmark={handleBookmark}
         onToggleSleepTimer={() => setShowSleepTimerLocal(!showSleepTimer)}
         onToggleVoice={() => setShowVoice(!showVoice)}
       />
@@ -238,7 +310,11 @@ export default function Reader() {
       {showVoice && <VoiceSelector onClose={() => setShowVoice(false)} />}
 
       {/* Text Viewer */}
-      <TextViewer text={currentText} />
+      <TextViewer 
+        text={currentText} 
+        selectionRange={selectionRange}
+        setSelectionRange={setSelectionRange}
+      />
 
       {/* Bookmarks — below text */}
       {showBookmarks && <BookmarkPanel tts={tts} onClose={() => setShowBookmarks(false)} />}

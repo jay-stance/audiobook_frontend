@@ -21,11 +21,12 @@ function splitSentences(text) {
   return sentences;
 }
 
-export default function TextViewer({ text }) {
+export default function TextViewer({ text, selectionRange, setSelectionRange }) {
   const { currentSentenceIndex, showTextViewer } = useStore();
   const containerRef = useRef(null);
   const activeRef = useRef(null);
   const [collapsed, setCollapsed] = useState(false);
+  const lastClickedRef = useRef(null);
 
   const sentences = useMemo(() => splitSentences(text), [text]);
 
@@ -38,6 +39,21 @@ export default function TextViewer({ text }) {
       });
     }
   }, [currentSentenceIndex, collapsed]);
+
+  const handleSentenceClick = (index, e) => {
+    e.stopPropagation(); // Prevent potentially closing things if nested
+    
+    // Shift + Click for range selection
+    if (e.shiftKey && lastClickedRef.current !== null) {
+      const start = Math.min(lastClickedRef.current, index);
+      const end = Math.max(lastClickedRef.current, index);
+      setSelectionRange({ start, end });
+    } else {
+      // Single click - select just this one
+      setSelectionRange({ start: index, end: index });
+      lastClickedRef.current = index;
+    }
+  };
 
   if (!showTextViewer || !text) return null;
 
@@ -64,23 +80,25 @@ export default function TextViewer({ text }) {
           className="p-5 max-h-[50vh] overflow-y-auto text-base leading-relaxed"
           style={{ fontFamily: '"Inter", Georgia, serif' }}
         >
-          {sentences.map((sentence, idx) => (
-            <span
-              key={idx}
-              ref={idx === currentSentenceIndex ? activeRef : null}
-              className={`
-                inline transition-all duration-300 cursor-pointer
-                ${idx === currentSentenceIndex
-                  ? 'sentence-active font-medium'
-                  : idx < currentSentenceIndex
-                    ? 'text-gray-500'
-                    : ''
-                }
-              `}
-            >
-              {sentence}{' '}
-            </span>
-          ))}
+          {sentences.map((sentence, idx) => {
+            const isSelected = selectionRange && idx >= Math.min(selectionRange.start, selectionRange.end) && idx <= Math.max(selectionRange.start, selectionRange.end);
+            const isActive = idx === currentSentenceIndex;
+            
+            return (
+              <span
+                key={idx}
+                ref={isActive ? activeRef : null}
+                onClick={(e) => handleSentenceClick(idx, e)}
+                className={`
+                  inline transition-all duration-200 cursor-pointer rounded px-0.5
+                  ${isActive ? 'sentence-active font-medium' : 'text-gray-500 hover:text-gray-300'}
+                  ${isSelected ? 'bg-primary-500/20 text-primary-200' : ''}
+                `}
+              >
+                {sentence}{' '}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>

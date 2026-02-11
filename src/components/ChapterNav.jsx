@@ -4,6 +4,18 @@ import useStore from '../store/useStore';
 
 export default function ChapterNav({ pages, onClose }) {
   const { currentPage, setCurrentPage } = useStore();
+  const activeBtnRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (activeBtnRef.current) {
+      activeBtnRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'center'
+      });
+    }
+  }, [currentPage, onClose]);
+
 
   if (!pages || pages.length === 0) return null;
 
@@ -52,11 +64,12 @@ export default function ChapterNav({ pages, onClose }) {
         {pages.map((_, idx) => (
           <button
             key={idx}
+            ref={idx === currentPage ? activeBtnRef : null}
             onClick={() => setCurrentPage(idx)}
             className={`py-2 rounded-lg text-xs font-medium transition-all
               ${idx === currentPage
-                ? 'gradient-bg text-white glow-purple'
-                : 'hover:bg-white/10 border border-white/5'
+                ? 'gradient-bg text-white glow-purple scale-110 shadow-lg'
+                : 'hover:bg-white/10 border border-white/5 text-gray-400'
               }`}
           >
             {idx + 1}

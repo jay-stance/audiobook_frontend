@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import useStore from '../store/useStore';
 
-export default function AudioPlayer({ tts, currentText, onToggleSleepTimer, onToggleVoice }) {
+export default function AudioPlayer({ tts, currentText, onToggleSleepTimer, onToggleVoice, onBookmark }) {
   const {
     isPlaying, currentBook, playbackSpeed, setPlaybackSpeed,
     currentSentenceIndex, totalSentences, volume, setVolume,
@@ -32,6 +32,11 @@ export default function AudioPlayer({ tts, currentText, onToggleSleepTimer, onTo
   }, [currentSentenceIndex, totalSentences]);
 
   const handleBookmark = () => {
+    if (onBookmark) {
+      onBookmark();
+      return;
+    }
+    // Fallback if no prop provided (though Reader always provides it)
     addBookmark({
       page: currentPage,
       position: currentSentenceIndex,
