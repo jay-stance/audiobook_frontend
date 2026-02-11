@@ -9,7 +9,7 @@ import VoiceSelector from '../components/VoiceSelector';
 import useTTS from '../hooks/useTTS';
 import useMediaSession from '../hooks/useMediaSession';
 import useStore from '../store/useStore';
-import axios from 'axios';
+import api from '../lib/api';
 
 export default function Reader() {
   const {
@@ -39,7 +39,7 @@ export default function Reader() {
   // Re-fetch full book data if we only have persisted metadata (no pages/cleanedText)
   useEffect(() => {
     if (currentBook?._id && !currentBook.pages && !currentBook.cleanedText) {
-      axios.get(`/api/library/${currentBook._id}`)
+      api.get(`/api/library/${currentBook._id}`)
         .then(({ data }) => {
           if (data.success && data.book) {
             setCurrentBook(data.book);
@@ -71,7 +71,7 @@ export default function Reader() {
         totalListeningTime: useStore.getState().totalListeningTime,
         bookmarks: useStore.getState().bookmarks
       };
-      axios.post('/api/progress', progress).catch(() => {});
+      api.post('/api/progress', progress).catch(() => {});
     }, 3000);
     return () => clearTimeout(timer);
   }, [currentBook, currentPage, currentSentenceIndex, totalSentences]);

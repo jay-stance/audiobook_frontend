@@ -4,7 +4,7 @@ import UploadZone from '../components/UploadZone';
 import Library from '../components/Library';
 import useStore from '../store/useStore';
 import usePDFParser from '../hooks/usePDFParser';
-import axios from 'axios';
+import api from '../lib/api';
 
 export default function Home() {
   const {
@@ -25,7 +25,7 @@ export default function Home() {
       formData.append('pdf', file);
 
       setUploadProgress(30);
-      const { data } = await axios.post('/api/upload', formData, {
+      const { data } = await api.post('/api/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (e) => {
           const pct = Math.round((e.loaded / e.total) * 50) + 20;
@@ -51,7 +51,8 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Upload failed:', err);
-      setError(err.response?.data?.error || 'Failed to upload PDF. Please try again.');
+      const errMsg = err.response?.data?.error;
+      setError(typeof errMsg === 'string' ? errMsg : err.message || 'Failed to upload PDF. Please try again.');
       setIsUploading(false);
       setUploadProgress(0);
     }
@@ -60,7 +61,7 @@ export default function Home() {
   const handleSelectBook = useCallback(async (book) => {
     try {
       // Fetch full book data
-      const { data } = await axios.get(`/api/library/${book._id}`);
+      const { data } = await api.get(`/api/library/${book._id}`);
       if (data.success) {
         setCurrentBook(data.book);
         resetPlayer();
@@ -68,7 +69,7 @@ export default function Home() {
 
         // Load saved progress
         try {
-          const { data: progData } = await axios.get(`/api/progress/${book._id}`);
+          const { data: progData } = await api.get(`/api/progress/${book._id}`);
           if (progData.success && progData.progress) {
             setCurrentPage(progData.progress.currentPage || 0);
           }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, Trash2, Clock, FileText, Loader2 } from 'lucide-react';
 import useStore from '../store/useStore';
-import axios from 'axios';
+import api from '../lib/api';
 
 export default function Library({ onSelectBook }) {
   const { books, setBooks, removeBook } = useStore();
@@ -13,7 +13,7 @@ export default function Library({ onSelectBook }) {
 
   const loadBooks = async () => {
     try {
-      const { data } = await axios.get('/api/library');
+      const { data } = await api.get('/api/library');
       if (data.success) {
         setBooks(data.books);
       }
@@ -27,7 +27,7 @@ export default function Library({ onSelectBook }) {
   const handleDelete = async (e, id) => {
     e.stopPropagation();
     try {
-      await axios.delete(`/api/library/${id}`);
+      await api.delete(`/api/library/${id}`);
       removeBook(id);
     } catch (err) {
       console.error('Failed to delete book:', err);
